@@ -9,7 +9,7 @@ def lambda_handler(event, context):
         bucket = os.environ['BUCKET_NAME']
 
         # get key
-        key = event.get('key')
+        key = json.loads(event.get('body'))["key"]
 
         # generate url
         s3 = boto3.client("s3")
@@ -25,10 +25,7 @@ def lambda_handler(event, context):
         
         return {
             "statusCode": "200",
-            "body": {
-                "url": url
-            }
-
+            "body": json.dumps({"url":url}),
         }
     except:
         return {
