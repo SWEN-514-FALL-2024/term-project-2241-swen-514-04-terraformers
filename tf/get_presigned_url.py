@@ -6,16 +6,22 @@ def lambda_handler(event, context):
 
     try:
         # get bucket
-        bucket = os.getenv('BUCKET_NAME')
+        bucket = os.environ['BUCKET_NAME']
 
         # get key
-        body = event.get('body')
-        body = json.loads(body)
-        key = body["key"]
+        key = event.get('key')
 
         # generate url
         s3 = boto3.client("s3")
-        url = s3.generate_presigned_url('put_object', Params={"Bucket": bucket, "Key": key}, ExpiresIn=3600)
+
+        url = s3.generate_presigned_url(
+            ClientMethod='put_object',
+            Params={
+                'Bucket': bucket,
+                'Key': key,
+                'ContentType': 'video/mp4'
+            }
+        )
         
         return {
             "statusCode": "200",
@@ -27,5 +33,5 @@ def lambda_handler(event, context):
     except:
         return {
             "statusCode": "500",
-            "body": json.dumps("Internal Server Error")
+            "body": json.dumps("Internal Server Error. Whoops.")
         }
