@@ -95,7 +95,9 @@ resource "aws_api_gateway_resource" "url_resource" {
 resource "aws_api_gateway_method" "method" {
   rest_api_id   = aws_api_gateway_rest_api.rest_api.id
   resource_id   = aws_api_gateway_resource.url_resource.id
-  request_models = "application/json"
+  request_models = {
+    "application/json" = null
+  }
   http_method   = "POST"
   authorization = "NONE"
 }
