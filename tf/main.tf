@@ -46,7 +46,10 @@ resource "aws_iam_policy" "policy" {
       {
         Action = "s3:*"
         Effect   = "Allow"
-        Resource = "*"
+        Resource = [
+          "${aws_s3_bucket.bucket.arn}",
+          "${aws_s3_bucket.bucket.arn}/*"
+          ]
       },
     ]
   })
@@ -98,7 +101,7 @@ resource "aws_api_gateway_method" "method" {
   request_models = {
     "application/json" = null
   }
-  http_method   = "POST"
+  http_method   = "GET"
   authorization = "NONE"
 }
 
@@ -112,12 +115,9 @@ resource "aws_api_gateway_integration" "integration" {
 }
 
 resource "aws_lambda_permission" "lambda_permission" {
-  statement_id  = "AllowExecutionFromAPIGateway"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.get_presigned_url.function_name
   principal     = "apigateway.amazonaws.com"
-
-  # More: http://docs.aws.amazon.com/apigateway/latest/developerguide/api-gateway-control-access-using-iam-policies-to-invoke-api.html
   source_arn    = "${aws_api_gateway_rest_api.rest_api.execution_arn}/*/*"
 }
 
