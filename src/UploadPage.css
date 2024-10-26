@@ -1,0 +1,64 @@
+/* VideoUpload.css */
+
+.video-upload-container {
+    padding: 20px;
+    text-align: center;
+}
+
+.dropbox {
+    width: 300px;
+    height: 300px;
+    border: 2px dashed #777;
+    border-radius: 10px;
+    margin: 20px auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    transition: border-color ease 0.1s;
+}
+
+.dropbox:hover {
+    border-color: white;
+}
+
+.file-input {
+    opacity: 0;
+    position: absolute;
+    width: 300px;
+    height: 300px;
+    cursor: pointer;
+}
+
+.dropbox-text {
+    z-index: -1;
+    color: #555;
+    font-size: 16px;
+}
+
+.uploaded {
+    color: white;
+    font-weight: bold;
+}
+
+.analyze-button {
+    padding: 10px 20px;
+    font-size: 16px;
+    cursor: pointer;
+    background-color: #4caf50;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    margin-top: 20px;
+    transition: background-color 0.3s ease;
+}
+
+.analyze-button.disabled {
+    background-color: #265728;
+    color: #777;
+    cursor: not-allowed;
+}
+
+.analyze-button:not(:disabled):hover {
+    background-color: #72ff78;
+}
