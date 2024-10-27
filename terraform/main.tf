@@ -158,8 +158,18 @@ resource "aws_s3_bucket_ownership_controls" "react_app_bucket_ownership_controls
   }
 }
 
+resource "aws_s3_bucket_public_access_block" "react_app_public_access_block" {
+  bucket = aws_s3_bucket.react_app_bucket.id
+
+  block_public_acls       = false
+  block_public_policy     = false
+  ignore_public_acls      = false
+  restrict_public_buckets = false
+}
+
 # Public access policy for the React App bucket
 resource "aws_s3_bucket_policy" "react_app_bucket_policy" {
+  depends_on = [ aws_s3_bucket_public_access_block.react_app_public_access_block ]
   bucket = aws_s3_bucket.react_app_bucket.id
 
   policy = <<EOF
@@ -175,15 +185,6 @@ resource "aws_s3_bucket_policy" "react_app_bucket_policy" {
   ]
 }
 EOF
-}
-
-resource "aws_s3_bucket_public_access_block" "react_app_public_access_block" {
-  bucket = aws_s3_bucket.react_app_bucket.id
-
-  block_public_acls       = false
-  block_public_policy     = false
-  ignore_public_acls      = false
-  restrict_public_buckets = false
 }
 
 # Upload React App build files to the S3 bucket from dist/ folder using aws_s3_object
