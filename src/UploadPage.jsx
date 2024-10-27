@@ -26,7 +26,7 @@ const UploadPage = () => {
 
     try {
       // 1. Make POST request to get upload URL
-      const postResponse = await fetch('/api/get-upload-url', {
+      const postResponse = await fetch(process.env.API_GATEWAY_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

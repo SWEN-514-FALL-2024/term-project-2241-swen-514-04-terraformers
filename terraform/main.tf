@@ -49,7 +49,7 @@ resource "aws_iam_policy" "policy" {
         Resource = [
           "${aws_s3_bucket.bucket.arn}",
           "${aws_s3_bucket.bucket.arn}/*"
-          ]
+        ]
       },
     ]
   })
@@ -129,5 +129,77 @@ resource "aws_api_gateway_deployment" "deployment" {
 
 output "deployment_invoke_url" {
   description = "Deployment invoke url"
-  value       = "${aws_api_gateway_deployment.deployment.invoke_url}/url"
+  value       = "${aws_api_gateway_deployment.deployment.invoke_url}/${aws_api_gateway_resource.url_resource.path_part}"
+}
+
+# Bucket for hosting the React App
+resource "aws_s3_bucket" "react_app_bucket" {
+  bucket = "terraformers-vidinsight-react-app"
+}
+
+# S3 Website Hosting Configuration
+resource "aws_s3_bucket_website_configuration" "react_app_website" {
+  bucket = aws_s3_bucket.react_app_bucket.bucket
+
+  index_document {
+    suffix = "index.html"
+  }
+
+  error_document {
+    key = "index.html"
+  }
+}
+# Bucket Ownership Controls (Replacing ACL)
+resource "aws_s3_bucket_ownership_controls" "react_app_bucket_ownership_controls" {
+  bucket = aws_s3_bucket.react_app_bucket.bucket
+
+  rule {
+    object_ownership = "BucketOwnerPreferred"
+  }
+}
+
+# Public access policy for the React App bucket
+resource "aws_s3_bucket_policy" "react_app_bucket_policy" {
+  bucket = aws_s3_bucket.react_app_bucket.id
+
+  policy = <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": "*",
+      "Action": "s3:*",
+      "Resource": [
+        "${aws_s3_bucket.react_app_bucket.arn}",
+        "${aws_s3_bucket.react_app_bucket.arn}/*"
+      ]
+    }
+  ]
+}
+EOF
+}
+
+# Upload React App build files to the S3 bucket from dist/ folder using aws_s3_object
+resource "aws_s3_object" "react_app_files" {
+  for_each = fileset("${path.module}/../dist", "**/*")
+
+  bucket = aws_s3_bucket.react_app_bucket.bucket
+  key    = each.value
+  source = "${path.module}/../dist/${each.value}"
+
+  # Add content encoding if required (e.g., for gzipped assets)
+  etag = filemd5("${path.module}/../dist/${each.value}")
+}
+
+# Local file for environment variable injection
+resource "local_file" "env_file" {
+  content  = "API_GATEWAY_URL=${aws_api_gateway_deployment.deployment.invoke_url}/${aws_api_gateway_resource.url_resource.path_part}"
+  filename = "${path.module}/../dist/.env"
+}
+
+# Output for accessing the React App via the S3 Website URL
+output "react_app_url" {
+  value = aws_s3_bucket.react_app_bucket.website_endpoint
+  description = "URL for the React App"
 }
