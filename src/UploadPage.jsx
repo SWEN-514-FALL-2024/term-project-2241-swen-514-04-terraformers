@@ -25,8 +25,9 @@ const UploadPage = () => {
     setIsAnalyzing(true);
 
     try {
+      console.log(import.meta.env);
       // 1. Make POST request to get upload URL
-      const postResponse = await fetch(process.env.API_GATEWAY_URL, {
+      const postResponse = await fetch(import.meta.env.API_GATEWAY_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

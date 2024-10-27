@@ -180,7 +180,7 @@ resource "aws_s3_bucket_policy" "react_app_bucket_policy" {
       "Effect": "Allow",
       "Principal": "*",
       "Action": "s3:*",
-      "Resource": "${aws_s3_bucket.react_app_bucket.arn}"
+      "Resource": "${aws_s3_bucket.react_app_bucket.arn}/*"
     }
   ]
 }
@@ -194,6 +194,18 @@ resource "aws_s3_object" "react_app_files" {
   bucket = aws_s3_bucket.react_app_bucket.bucket
   key    = each.value
   source = "${path.module}/../dist/${each.value}"
+
+  # Determine content_type based on file extension
+  content_type = lookup(
+    {
+      "html" = "text/html",
+      "css"  = "text/css",
+      "js"   = "application/javascript",
+      "svg"  = "image/svg+xml"
+    },
+    regex("[^.]+$", each.value), # This extracts the file extension
+    "application/octet-stream"   # Default content-type if no match
+  )
 
   # Add content encoding if required (e.g., for gzipped assets)
   etag = filemd5("${path.module}/../dist/${each.value}")
