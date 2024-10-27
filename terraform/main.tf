@@ -180,6 +180,15 @@ resource "aws_s3_bucket_policy" "react_app_bucket_policy" {
 EOF
 }
 
+resource "aws_s3_bucket_public_access_block" "react_app_public_access_block" {
+  bucket = aws_s3_bucket.react_app_bucket.id
+
+  block_public_acls       = false
+  block_public_policy     = false
+  ignore_public_acls      = false
+  restrict_public_buckets = false
+}
+
 # Upload React App build files to the S3 bucket from dist/ folder using aws_s3_object
 resource "aws_s3_object" "react_app_files" {
   for_each = fileset("${path.module}/../dist", "**/*")
@@ -200,6 +209,6 @@ resource "local_file" "env_file" {
 
 # Output for accessing the React App via the S3 Website URL
 output "react_app_url" {
-  value = aws_s3_bucket.react_app_bucket.website_endpoint
+  value = aws_s3_bucket_website_configuration.react_app_website.website_endpoint
   description = "URL for the React App"
 }
