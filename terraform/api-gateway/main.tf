@@ -121,6 +121,59 @@ resource "aws_api_gateway_integration" "integration" {
   uri                     = aws_lambda_function.get_presigned_url.invoke_arn
 }
 
+resource "aws_api_gateway_method" "options_method" {
+    rest_api_id             = aws_api_gateway_rest_api.rest_api.id
+    resource_id             = aws_api_gateway_resource.url_resource.id
+    http_method   = "OPTIONS"
+    authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "options_integration" {
+    rest_api_id             = aws_api_gateway_rest_api.rest_api.id
+    resource_id             = aws_api_gateway_resource.url_resource.id
+    http_method             = aws_api_gateway_method.options_method.http_method
+    type          = "MOCK"
+
+    request_templates = {
+        "application/json" = "{\"statusCode\": 200}"
+    }
+
+    depends_on = [ aws_api_gateway_method.options_method ]
+}
+
+resource "aws_api_gateway_integration_response" "options_integration_response" {
+    rest_api_id             = aws_api_gateway_rest_api.rest_api.id
+    resource_id             = aws_api_gateway_resource.url_resource.id
+    http_method             = aws_api_gateway_method.options_method.http_method
+    status_code             = aws_api_gateway_method_response.options_200.status_code
+
+    response_parameters = {
+        "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'",
+        "method.response.header.Access-Control-Allow-Methods" = "'GET,OPTIONS,POST,PUT'",
+        "method.response.header.Access-Control-Allow-Origin" = "'*'"
+    }
+    depends_on = [ aws_api_gateway_method_response.options_200 ]
+}
+
+resource "aws_api_gateway_method_response" "options_200" {
+    rest_api_id             = aws_api_gateway_rest_api.rest_api.id
+    resource_id             = aws_api_gateway_resource.url_resource.id
+    http_method             = aws_api_gateway_method.options_method.http_method
+    status_code   = "200"
+
+    response_models = {
+        "application/json" = "Empty"
+    }
+
+    response_parameters = {
+        "method.response.header.Access-Control-Allow-Headers" = true,
+        "method.response.header.Access-Control-Allow-Methods" = true,
+        "method.response.header.Access-Control-Allow-Origin" = true
+    }
+
+    depends_on = [ aws_api_gateway_method.options_method ]
+}
+
 resource "aws_lambda_permission" "lambda_permission" {
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.get_presigned_url.function_name
@@ -134,103 +187,17 @@ resource "aws_api_gateway_deployment" "deployment" {
   stage_name = "prod"
 }
 
-output "deployment_invoke_url" {
-  description = "Deployment invoke url"
-  value       = "${aws_api_gateway_deployment.deployment.invoke_url}/${aws_api_gateway_resource.url_resource.path_part}"
-}
-
-# Bucket for hosting the React App
-resource "aws_s3_bucket" "react_app_bucket" {
-  bucket = "terraformers-vidinsight-react-app"
-}
-
-# S3 Website Hosting Configuration
-resource "aws_s3_bucket_website_configuration" "react_app_website" {
-  bucket = aws_s3_bucket.react_app_bucket.bucket
-
-  index_document {
-    suffix = "index.html"
-  }
-
-  error_document {
-    key = "index.html"
-  }
-}
-# Bucket Ownership Controls (Replacing ACL)
-resource "aws_s3_bucket_ownership_controls" "react_app_bucket_ownership_controls" {
-  bucket = aws_s3_bucket.react_app_bucket.bucket
-
-  rule {
-    object_ownership = "BucketOwnerPreferred"
-  }
-}
-
-resource "aws_s3_bucket_public_access_block" "react_app_public_access_block" {
-  bucket = aws_s3_bucket.react_app_bucket.id
-
-  block_public_acls       = false
-  block_public_policy     = false
-  ignore_public_acls      = false
-  restrict_public_buckets = false
-}
-
-# Public access policy for the React App bucket
-resource "aws_s3_bucket_policy" "react_app_bucket_policy" {
-  depends_on = [ aws_s3_bucket_public_access_block.react_app_public_access_block ]
-  bucket = aws_s3_bucket.react_app_bucket.id
-
-  policy = <<EOF
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Principal": "*",
-      "Action": "s3:*",
-      "Resource": "${aws_s3_bucket.react_app_bucket.arn}/*"
-    }
-  ]
-}
-EOF
-}
-
-# Upload React App build files to the S3 bucket from dist/ folder using aws_s3_object
-resource "aws_s3_object" "react_app_files" {
-  depends_on = [ local_file.build ]
-  for_each = fileset("${path.module}/../dist", "**/*")
-
-  bucket = aws_s3_bucket.react_app_bucket.bucket
-  key    = each.value
-  source = "${path.module}/../dist/${each.value}"
-
-  # Determine content_type based on file extension
-  content_type = lookup(
-    {
-      "html" = "text/html",
-      "css"  = "text/css",
-      "js"   = "application/javascript",
-      "svg"  = "image/svg+xml"
-    },
-    regex("[^.]+$", each.value), # This extracts the file extension
-    "application/octet-stream"   # Default content-type if no match
-  )
-
-  # Add content encoding if required (e.g., for gzipped assets)
-  etag = filemd5("${path.module}/../dist/${each.value}")
-}
-
 # Local file for environment variable injection
 resource "local_file" "build" {
   content  = "VITE_API_GATEWAY_URL=${aws_api_gateway_deployment.deployment.invoke_url}/${aws_api_gateway_resource.url_resource.path_part}"
-  filename = "${path.module}/../.env"
+  filename = "${path.module}/../../.env"
 
   provisioner "local-exec" {
-    command = "cd .. && npm run build"
+    command = "cd ${path.module}/../.. && npm run build"
   }
 }
 
-# Output for accessing the React App via the S3 Website URL
-output "react_app_url" {
-  value = aws_s3_bucket_website_configuration.react_app_website.website_endpoint
-  description = "URL for the React App"
+output "deployment_invoke_url" {
+  description = "Deployment invoke url"
+  value       = "${aws_api_gateway_deployment.deployment.invoke_url}/${aws_api_gateway_resource.url_resource.path_part}"
 }
