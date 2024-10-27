@@ -170,10 +170,7 @@ resource "aws_s3_bucket_policy" "react_app_bucket_policy" {
       "Effect": "Allow",
       "Principal": "*",
       "Action": "s3:*",
-      "Resource": [
-        "${aws_s3_bucket.react_app_bucket.arn}",
-        "${aws_s3_bucket.react_app_bucket.arn}/*"
-      ]
+      "Resource": "${aws_s3_bucket.react_app_bucket.arn}"
     }
   ]
 }
