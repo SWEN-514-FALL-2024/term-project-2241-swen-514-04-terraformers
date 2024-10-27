@@ -1,5 +1,5 @@
 provider "aws" {
-  region = "us-east-1"  
+  region = "us-east-1"
 }
 
 resource "aws_s3_bucket" "bucket" {
@@ -60,7 +60,14 @@ resource "aws_iam_role_policy_attachment" "role_policy_attachment" {
   policy_arn = aws_iam_policy.policy.arn
 }
 
+resource "null_resource" "create_zip" {
+  provisioner "local-exec" {
+    command = "rm get_presigned_url.zip && zip get_presigned_url.zip get_presigned_url.py"
+  }
+}
+
 data "archive_file" "get_presigned_url_file" {
+  depends_on = [ null_resource.create_zip ]
   type        = "zip"
   source_file = "get_presigned_url.py"
   output_path = "get_presigned_url.zip"
@@ -189,6 +196,7 @@ EOF
 
 # Upload React App build files to the S3 bucket from dist/ folder using aws_s3_object
 resource "aws_s3_object" "react_app_files" {
+  depends_on = [ local_file.build ]
   for_each = fileset("${path.module}/../dist", "**/*")
 
   bucket = aws_s3_bucket.react_app_bucket.bucket
@@ -212,9 +220,13 @@ resource "aws_s3_object" "react_app_files" {
 }
 
 # Local file for environment variable injection
-resource "local_file" "env_file" {
-  content  = "API_GATEWAY_URL=${aws_api_gateway_deployment.deployment.invoke_url}/${aws_api_gateway_resource.url_resource.path_part}"
-  filename = "${path.module}/../dist/.env"
+resource "local_file" "build" {
+  content  = "VITE_API_GATEWAY_URL=${aws_api_gateway_deployment.deployment.invoke_url}/${aws_api_gateway_resource.url_resource.path_part}"
+  filename = "${path.module}/../.env"
+
+  provisioner "local-exec" {
+    command = "cd .. && npm run build"
+  }
 }
 
 # Output for accessing the React App via the S3 Website URL
