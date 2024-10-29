@@ -9,9 +9,9 @@
 
 #### Prerequisites
 Before getting started, make sure you have the following installed on your machine:
-- **Node.js** with **npm** 
-- **Terraform**
+- **Node.js** with **npm**
 - **AWS CLI**
+- **Terraform**
 
 #### Steps
 
@@ -21,16 +21,16 @@ Before getting started, make sure you have the following installed on your machi
    npm install
    ```
 
-2. **Initialize Terraform**  
-   Navigate to each subfolder inside the `terraform/` directory and initialize Terraform by running:
-   ```bash
-   terraform init
-   ```
-
-3. **Configure AWS CLI**  
+2. **Configure AWS CLI**  
    Ensure your AWS CLI is configured with your access keys:
    ```bash
    aws configure
+   ```
+
+3. **Initialize Terraform**  
+   Navigate to each subfolder inside the `terraform/` directory and initialize Terraform by running:
+   ```bash
+   terraform init
    ```
 
 4. **Running Terraform**  
