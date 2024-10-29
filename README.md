@@ -47,4 +47,4 @@ Before getting started, make sure you have the following installed on your machi
    ```
 
 #### Automation Scripts
-I’m working on automating these Terraform commands for easier use. Currently, I've created `.sh` scripts that automate the `init`, `plan`, `apply`, and `destroy` commands, but these only work on UNIX-based systems. I will soon provide equivalent scripts for Windows users.
+I’m working on automating these Terraform commands for easier use. Currently, I've created `.sh` scripts that automate the `apply`, and `destroy` commands, but these only work on UNIX-based systems. I will soon provide equivalent scripts for Windows users.
