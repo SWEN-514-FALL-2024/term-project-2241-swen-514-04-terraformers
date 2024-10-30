@@ -1,6 +1,7 @@
 import json
 import boto3
 import os
+import traceback
 
 def lambda_handler(event, context):
 
@@ -9,7 +10,7 @@ def lambda_handler(event, context):
         bucket = os.environ['BUCKET_NAME']
 
         # get key
-        key = json.loads(event.get('body'))["key"]
+        key = event.get('key')
 
         # generate url
         s3 = boto3.client("s3")
@@ -25,10 +26,12 @@ def lambda_handler(event, context):
         
         return {
             "statusCode": "200",
-            "body": json.dumps({"url":url}),
+            "body": {
+                "url": url
+            }
         }
-    except:
+    except Exception as e:
         return {
             "statusCode": "500",
-            "body": json.dumps("Internal Server Error. Whoops.")
+            "body": json.dumps(traceback.format_exc())
         }

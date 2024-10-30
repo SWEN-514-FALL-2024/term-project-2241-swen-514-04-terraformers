@@ -25,8 +25,7 @@ const UploadPage = () => {
     setIsAnalyzing(true);
 
     try {
-      console.log(import.meta.env);
-      // 1. Make POST request to get upload URL
+      
       const postResponse = await fetch(import.meta.env.VITE_API_GATEWAY_URL, {
         method: 'POST',
         headers: {
@@ -36,7 +35,8 @@ const UploadPage = () => {
       });
 
       const postResult = await postResponse.json();
-      const uploadUrl = postResult.url;
+
+      const uploadUrl = postResult.body.url;
 
       // 2. Make PUT request to upload the file to the obtained URL
       const putResponse = await fetch(uploadUrl, {
@@ -54,7 +54,6 @@ const UploadPage = () => {
       }
     } catch (error) {
       console.error('Error uploading file:', error);
-      alert('Error during analysis or upload.');
     } finally {
       setIsAnalyzing(false);
     }

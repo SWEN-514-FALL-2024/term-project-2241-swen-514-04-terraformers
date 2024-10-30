@@ -4,6 +4,7 @@ provider "aws" {
 
 resource "aws_s3_bucket" "bucket" {
   bucket = "terraformers-vidinsight-s3"
+  force_destroy = true
 }
 
 resource "aws_s3_bucket_cors_configuration" "bucket_cors_configuration" {
@@ -11,7 +12,7 @@ resource "aws_s3_bucket_cors_configuration" "bucket_cors_configuration" {
 
   cors_rule {
     allowed_headers = ["*"]
-    allowed_methods = ["PUT"]
+    allowed_methods = ["POST", "GET", "PUT", "DELETE"]
     allowed_origins = ["*"]
   }
 }
@@ -93,6 +94,11 @@ resource "aws_lambda_function" "get_presigned_url" {
 resource "aws_api_gateway_rest_api" "rest_api" {
   name        = "terraformers-vidinsight-rest-api"
   description = "REST API for Vidinsight"
+
+
+  endpoint_configuration {
+    types = ["REGIONAL"]
+  }
 }
 
 # Create API resource /url
@@ -102,7 +108,8 @@ resource "aws_api_gateway_resource" "url_resource" {
   path_part   = "url"
 }
 
-resource "aws_api_gateway_method" "method" {
+#region POST /url Requests
+resource "aws_api_gateway_method" "url_method" {
   rest_api_id   = aws_api_gateway_rest_api.rest_api.id
   resource_id   = aws_api_gateway_resource.url_resource.id
   request_models = {
@@ -112,15 +119,59 @@ resource "aws_api_gateway_method" "method" {
   authorization = "NONE"
 }
 
-resource "aws_api_gateway_integration" "integration" {
-  rest_api_id             = aws_api_gateway_rest_api.rest_api.id
-  resource_id             = aws_api_gateway_resource.url_resource.id
-  http_method             = aws_api_gateway_method.method.http_method
+resource "aws_api_gateway_integration" "url_integration" {
+  rest_api_id = aws_api_gateway_rest_api.rest_api.id
+  resource_id = aws_api_gateway_resource.url_resource.id
+  http_method = aws_api_gateway_method.url_method.http_method
+  type        = "AWS"
   integration_http_method = "POST"
-  type                    = "AWS_PROXY"
   uri                     = aws_lambda_function.get_presigned_url.invoke_arn
 }
+#endregion
 
+#region POST /url Responses
+resource "aws_api_gateway_integration_response" "url_integration_response" {
+  rest_api_id = aws_api_gateway_rest_api.rest_api.id
+  resource_id = aws_api_gateway_resource.url_resource.id
+  http_method = aws_api_gateway_method.url_method.http_method
+  status_code = aws_api_gateway_method_response.url_method_response.status_code
+
+  # Header mapping
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Origin" = "'*'"
+  }
+
+  # Mapping template for application/json
+  response_templates = {
+    "application/json" = ""
+  }
+
+  # Content handling
+  # content_handling = "CONVERT_TO_TEXT"
+  depends_on = [ aws_api_gateway_integration.url_integration ]
+}
+
+resource "aws_api_gateway_method_response" "url_method_response" {
+  rest_api_id = aws_api_gateway_rest_api.rest_api.id
+  resource_id = aws_api_gateway_resource.url_resource.id
+  http_method = aws_api_gateway_method.url_method.http_method
+  status_code = "200"
+
+  # Response Headers
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Origin" = true
+  }
+
+  # Response Model for application/json
+  response_models = {
+    "application/json" = "Empty"
+  }
+
+  depends_on = [ aws_api_gateway_method.url_method ]
+}
+#endregion
+
+#region CREATE OPTIONS W/ CORS ENABLED
 resource "aws_api_gateway_method" "options_method" {
     rest_api_id             = aws_api_gateway_rest_api.rest_api.id
     resource_id             = aws_api_gateway_resource.url_resource.id
@@ -149,7 +200,7 @@ resource "aws_api_gateway_integration_response" "options_integration_response" {
 
     response_parameters = {
         "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'",
-        "method.response.header.Access-Control-Allow-Methods" = "'GET,OPTIONS,POST,PUT'",
+        "method.response.header.Access-Control-Allow-Methods" = "'OPTIONS,POST'",
         "method.response.header.Access-Control-Allow-Origin" = "'*'"
     }
     depends_on = [ aws_api_gateway_method_response.options_200 ]
@@ -173,6 +224,7 @@ resource "aws_api_gateway_method_response" "options_200" {
 
     depends_on = [ aws_api_gateway_method.options_method ]
 }
+#endregion
 
 resource "aws_lambda_permission" "lambda_permission" {
   action        = "lambda:InvokeFunction"
@@ -182,7 +234,7 @@ resource "aws_lambda_permission" "lambda_permission" {
 }
 
 resource "aws_api_gateway_deployment" "deployment" {
-  depends_on = [aws_api_gateway_integration.integration]
+  depends_on = [aws_api_gateway_integration_response.url_integration_response, aws_api_gateway_integration_response.options_integration_response]
   rest_api_id = aws_api_gateway_rest_api.rest_api.id
   stage_name = "prod"
 }
