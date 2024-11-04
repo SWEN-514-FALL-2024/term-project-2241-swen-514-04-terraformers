@@ -86,25 +86,74 @@ resource "aws_iam_role_policy_attachment" "transcribe_role_policy_attachment" {
   policy_arn = aws_iam_policy.transcribe_policy.arn
 }
 
-resource "null_resource" "create_zip" {
-  provisioner "local-exec" {
-    command = "wsl zip transcribe_lambda.zip transcribe_lambda.py"
-  }
+# IAM Role for Lambda
+resource "aws_iam_role" "transcribe_lambda_role" {
+  name = "terraformers-vidinsight-transcribe-lambda-role"
 
-  triggers = {
-    source = filemd5("transcribe_lambda.py")
-  }
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole",
+        Effect = "Allow",
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
 }
 
+# IAM Policy to allow Lambda to access Transcribe and S3
+resource "aws_iam_policy" "transcribe_lambda_policy" {
+  name        = "terraformers-vidinsight-transcribe-lambda-policy"
+  description = "Policy for Lambda to access AWS Transcribe and S3 bucket."
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = [
+          "transcribe:StartTranscriptionJob",
+          "transcribe:GetTranscriptionJob"
+        ],
+        Effect = "Allow",
+        Resource = "*"
+      },
+      {
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject"
+        ],
+        Effect = "Allow",
+        Resource = [
+          "${aws_s3_bucket.transcribe_bucket.arn}/*"
+        ]
+      }
+    ]
+  })
+}
+
+# resource "null_resource" "create_zip" {
+#   provisioner "local-exec" {
+#     command = "zip transcribe_lambda.zip transcribe_lambda.py"
+#   }
+
+#   triggers = {
+#     source = filemd5("transcribe_lambda.py")
+#   }
+# }
+
 data "archive_file" "transcribe_lambda_file" {
-  depends_on = [ null_resource.create_zip ]
+  # depends_on = [ null_resource.create_zip ]
   type        = "zip"
   source_file = "transcribe_lambda.py"
   output_path = "transcribe_lambda.zip"
 }
 
 resource "aws_lambda_function" "transcribe_lambda" {
-  depends_on = [null_resource.create_zip]
+  # depends_on = [null_resource.create_zip]
   filename         = "transcribe_lambda.zip"
   function_name    = "transcribe_lambda_function"
   role             = aws_iam_role.transcribe_role.arn
