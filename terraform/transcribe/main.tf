@@ -3,8 +3,10 @@ provider "aws" {
 }
 
 # S3 Bucket for storing video files to be transcribed
+# Should be the same as the bucket created in api-gateway?
 resource "aws_s3_bucket" "transcribe_bucket" {
   bucket = "terraformers-vidinsight-transcribe-bucket"
+  force_destroy = true
 }
 
 # Bucket Ownership Controls (Replacing ACL)
@@ -36,7 +38,6 @@ resource "aws_iam_role" "transcribe_role" {
       {
         Action = "sts:AssumeRole",
         Effect = "Allow",
-        Sid = "",
         Principal = {
           Service = "transcribe.amazonaws.com"
         }
@@ -55,6 +56,8 @@ resource "aws_iam_policy" "transcribe_policy" {
     Statement = [
       {
         Action = [
+          "transcribe:StartTranscriptionJob",
+          "transcribe:GetTranscriptionJob",
           "s3:GetObject",
           "s3:PutObject",
           "s3:DeleteObject"
@@ -64,14 +67,15 @@ resource "aws_iam_policy" "transcribe_policy" {
           "${aws_s3_bucket.transcribe_bucket.arn}/*"
         ]
       },
-      {
-        Action = [
-          "transcribe:StartTranscriptionJob",
-          "transcribe:GetTranscriptionJob"
-        ],
-        Effect = "Allow",
-        Resource = "*"
-      }
+      #unsure if i need this below because i put it above in actions
+      # {
+      #   Action = [
+      #     "transcribe:StartTranscriptionJob",
+      #     "transcribe:GetTranscriptionJob"
+      #   ],
+      #   Effect = "Allow",
+      #   Resource = "*"
+      # }
     ]
   })
 }
@@ -84,13 +88,23 @@ resource "aws_iam_role_policy_attachment" "transcribe_role_policy_attachment" {
 
 resource "null_resource" "create_zip" {
   provisioner "local-exec" {
-    command = "zip transcribe_lambda.zip transcribe_lambda.py"
+    command = "wsl zip transcribe_lambda.zip transcribe_lambda.py"
   }
+
+  triggers = {
+    source = filemd5("transcribe_lambda.py")
+  }
+}
+
+data "archive_file" "transcribe_lambda_file" {
+  depends_on = [ null_resource.create_zip ]
+  type        = "zip"
+  source_file = "transcribe_lambda.py"
+  output_path = "transcribe_lambda.zip"
 }
 
 resource "aws_lambda_function" "transcribe_lambda" {
   depends_on = [null_resource.create_zip]
-
   filename         = "transcribe_lambda.zip"
   function_name    = "transcribe_lambda_function"
   role             = aws_iam_role.transcribe_role.arn
@@ -102,10 +116,16 @@ resource "aws_lambda_function" "transcribe_lambda" {
         BUCKET_NAME = aws_s3_bucket.transcribe_bucket.bucket
     }
   }
-
-  source_code_hash = filebase64sha256("transcribe_lambda.zip")
+  source_code_hash = data.archive_file.transcribe_lambda_file.output_base64sha256
+  # source_code_hash = filebase64sha256("transcribe_lambda.zip")
 }
 
+resource "aws_lambda_permission" "allow_s3_invoke" {
+  statement_id  = "AllowExecutionFromS3"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.transcribe_lambda.function_name
+  principal     = "s3.amazonaws.com"
+}
 
 # API Gateway to trigger the Lambda function (if needed)
 resource "aws_api_gateway_rest_api" "transcribe_api" {
