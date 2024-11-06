@@ -3,9 +3,8 @@ provider "aws" {
 }
 
 # S3 Bucket for storing video files to be transcribed
-# Should be the same as the bucket created in api-gateway?
 resource "aws_s3_bucket" "transcribe_bucket" {
-  bucket = "terraformers-vidinsight-transcribe-bucket"
+  bucket = "terraformers-vidinsight-transcription-input-bucket"
   force_destroy = true
 }
 
@@ -28,27 +27,71 @@ resource "aws_s3_bucket_public_access_block" "transcribe_bucket_public_access_bl
   restrict_public_buckets = false
 }
 
+# S3 bucket notification to trigger transcribe
+resource "aws_s3_bucket_notification" "input_bucket_notification" {
+  bucket = aws_s3_bucket.transcribe_bucket.id
+
+  lambda_function {
+    lambda_function_arn = aws_lambda_function.transcribe_lambda.arn
+    events              = ["s3:ObjectCreated:*"]
+    filter_suffix       = ".mp4" #trigger for .mp4 files
+  }
+
+  depends_on = [aws_lambda_permission.allow_s3_invoke]
+}
+
+# S3 Bucket for storing video files after transcription
+resource "aws_s3_bucket" "output_bucket" {
+  bucket = "terraformers-vidinsight-transcription-output-bucket"
+  force_destroy = true
+}
+
+resource "aws_s3_bucket_public_access_block" "output_bucket_public_access_block" {
+  bucket = aws_s3_bucket.output_bucket.id
+
+  block_public_acls       = false
+  block_public_policy     = false
+  ignore_public_acls      = false
+  restrict_public_buckets = false
+}
+
 # IAM Role for AWS Transcribe
 resource "aws_iam_role" "transcribe_role" {
   name = "terraformers-vidinsight-transcribe-role"
 
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action = "sts:AssumeRole",
-        Effect = "Allow",
-        Principal = {
-          Service = "transcribe.amazonaws.com"
-        }
-      }
-    ]
-  })
+  assume_role_policy = data.aws_iam_policy_document.transcribe_policy_document.json
+  # assume_role_policy = jsonencode({
+  #   Version = "2012-10-17"
+  #   Statement = [
+  #     {
+  #       Action = "sts:AssumeRole",
+  #       Effect = "Allow",
+  #       Principal = {
+  #         #Service = "transcribe.amazonaws.com",
+  #         Service = "lambda.amazonaws.com"
+  #       }
+  #     }
+  #   ]
+  # })
+}
+
+data "aws_iam_policy_document" "transcribe_policy_document"{
+
+  statement{
+    effect = "Allow"
+
+    principals{
+      type = "Service"
+      identifiers = ["lambda.amazonaws.com"]
+    }
+    actions = ["sts:AssumeRole"]
+  }
+
 }
 
 # IAM Policy to allow Transcribe to access the S3 bucket
 resource "aws_iam_policy" "transcribe_policy" {
-  name        = "terraformers-vidinsight-transcribe-policy"
+  name        = "transcribe-policy"
   description = "Policy for AWS Transcribe to access S3 bucket."
 
   policy = jsonencode({
@@ -58,81 +101,32 @@ resource "aws_iam_policy" "transcribe_policy" {
         Action = [
           "transcribe:StartTranscriptionJob",
           "transcribe:GetTranscriptionJob",
-          "s3:GetObject",
-          "s3:PutObject",
-          "s3:DeleteObject"
-        ],
-        Effect = "Allow",
-        Resource = [
-          "${aws_s3_bucket.transcribe_bucket.arn}/*"
-        ]
-      },
-      #unsure if i need this below because i put it above in actions
-      # {
-      #   Action = [
-      #     "transcribe:StartTranscriptionJob",
-      #     "transcribe:GetTranscriptionJob"
-      #   ],
-      #   Effect = "Allow",
-      #   Resource = "*"
-      # }
-    ]
-  })
-}
-
-# Attach the IAM policy to the IAM role
-resource "aws_iam_role_policy_attachment" "transcribe_role_policy_attachment" {
-  role       = aws_iam_role.transcribe_role.name
-  policy_arn = aws_iam_policy.transcribe_policy.arn
-}
-
-# IAM Role for Lambda
-resource "aws_iam_role" "transcribe_lambda_role" {
-  name = "terraformers-vidinsight-transcribe-lambda-role"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action = "sts:AssumeRole",
-        Effect = "Allow",
-        Principal = {
-          Service = "lambda.amazonaws.com"
-        }
-      }
-    ]
-  })
-}
-
-# IAM Policy to allow Lambda to access Transcribe and S3
-resource "aws_iam_policy" "transcribe_lambda_policy" {
-  name        = "terraformers-vidinsight-transcribe-lambda-policy"
-  description = "Policy for Lambda to access AWS Transcribe and S3 bucket."
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action = [
-          "transcribe:StartTranscriptionJob",
-          "transcribe:GetTranscriptionJob"
         ],
         Effect = "Allow",
         Resource = "*"
       },
       {
         Action = [
-          "s3:GetObject",
-          "s3:PutObject",
-          "s3:DeleteObject"
+          "s3:GetObject"
         ],
         Effect = "Allow",
-        Resource = [
-          "${aws_s3_bucket.transcribe_bucket.arn}/*"
-        ]
+        Resource = "${aws_s3_bucket.transcribe_bucket.arn}/*"
+      },
+      {
+        Action = [
+          "s3:PutObject"
+        ],
+        Effect = "Allow",
+        Resource = "${aws_s3_bucket.output_bucket.arn}/*"
       }
     ]
   })
+}
+
+# Attach the IAM policy to the IAM role
+resource "aws_iam_role_policy_attachment" "transcribe_role_policy_attachment" {
+  role       = "${aws_iam_role.transcribe_role.name}"
+  policy_arn = "${aws_iam_policy.transcribe_policy.arn}"
 }
 
 # resource "null_resource" "create_zip" {
@@ -157,61 +151,33 @@ resource "aws_lambda_function" "transcribe_lambda" {
   filename         = "transcribe_lambda.zip"
   function_name    = "transcribe_lambda_function"
   role             = aws_iam_role.transcribe_role.arn
-  handler          = "transcribe_video.lambda_handler"
+  # handler          = "transcribe_lambda.lambda_handler"
+  handler          = "lambda_handler"
   runtime          = "python3.12"
 
   environment {
     variables = {
-        BUCKET_NAME = aws_s3_bucket.transcribe_bucket.bucket
+        INPUT_BUCKET = aws_s3_bucket.transcribe_bucket.bucket
+        OUTPUT_BUCKET = aws_s3_bucket.output_bucket.bucket
     }
   }
   source_code_hash = data.archive_file.transcribe_lambda_file.output_base64sha256
-  # source_code_hash = filebase64sha256("transcribe_lambda.zip")
 }
 
 resource "aws_lambda_permission" "allow_s3_invoke" {
-  statement_id  = "AllowExecutionFromS3"
+  statement_id  = "AllowExecutionFromS3Bucket"
   action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.transcribe_lambda.function_name
+  function_name = aws_lambda_function.transcribe_lambda.arn
   principal     = "s3.amazonaws.com"
+  source_arn    = aws_s3_bucket.transcribe_bucket.arn
 }
 
-# API Gateway to trigger the Lambda function (if needed)
-resource "aws_api_gateway_rest_api" "transcribe_api" {
-  name        = "TranscribeAPI"
-  description = "API for triggering transcription jobs"
-}
+# output "transcribe_bucket_name"{
+#   value         = aws_s3_bucket.transcribe_bucket.bucket
+#   description   = "S3 bucket for storing video files for transcription"
+# }
 
-# Create API resource for transcription
-resource "aws_api_gateway_resource" "transcribe_resource" {
-  rest_api_id = aws_api_gateway_rest_api.transcribe_api.id
-  parent_id   = aws_api_gateway_rest_api.transcribe_api.root_resource_id
-  path_part   = "transcribe"
-}
-
-resource "aws_api_gateway_method" "transcribe_method" {
-  rest_api_id   = aws_api_gateway_rest_api.transcribe_api.id
-  resource_id   = aws_api_gateway_resource.transcribe_resource.id
-  http_method   = "POST"
-  authorization = "NONE"
-}
-
-resource "aws_api_gateway_integration" "transcribe_integration" {
-  rest_api_id             = aws_api_gateway_rest_api.transcribe_api.id
-  resource_id             = aws_api_gateway_resource.transcribe_resource.id
-  http_method             = aws_api_gateway_method.transcribe_method.http_method
-  integration_http_method = "POST"
-  type                    = "AWS_PROXY"
-  uri                     = aws_lambda_function.transcribe_lambda.invoke_arn
-}
-
-# Output for the Transcribe bucket and API URL
-output "transcribe_bucket_name" {
-  value       = aws_s3_bucket.transcribe_bucket.bucket
-  description = "Name of the S3 bucket for storing video files for transcription."
-}
-
-output "transcribe_api_url" {
-  value       = "${aws_api_gateway_rest_api.transcribe_api.execution_arn}/${aws_api_gateway_resource.transcribe_resource.path_part}"
-  description = "API URL for triggering transcription jobs."
-}
+# output "output_bucket_name"{
+#   value         = aws_s3_bucket.output_bucket.bucket
+#   description   = "S3 bucket for storing transcription output"
+# }
