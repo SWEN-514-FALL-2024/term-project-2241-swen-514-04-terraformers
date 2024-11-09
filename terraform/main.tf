@@ -239,17 +239,139 @@ resource "aws_api_gateway_deployment" "deployment" {
   stage_name = "prod"
 }
 
-# Local file for environment variable injection
-resource "local_file" "build" {
-  content  = "VITE_API_GATEWAY_URL=${aws_api_gateway_deployment.deployment.invoke_url}/${aws_api_gateway_resource.url_resource.path_part}"
-  filename = "${path.module}/../../.env"
+#region EC2 Stuff
+resource "aws_iam_role" "react_ec2_role" {
+  name = "vidinsight-react-ec2-role"
 
-  provisioner "local-exec" {
-    command = "cd ${path.module}/../.. && npm run build"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "ec2.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "react_ec2_policy" {
+  name = "vidinsight-react-ec2-policy"
+  role = aws_iam_role.react_ec2_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:ListBucket"
+        ]
+        Resource = [
+          "arn:aws:s3:::vidinsight-frontend-s3/",
+          "arn:aws:s3:::vidinsight-frontend-s3/frontend/*"
+        ]
+      }
+    ]
+  })
+}
+
+resource "aws_iam_instance_profile" "react_ec2_profile" {
+  name = "vidinsight-react-ec2-profile"
+  role = aws_iam_role.react_ec2_role.name
+}
+
+resource "aws_security_group" "react_sg" {
+  name        = "vidinsight-react-sg"
+  description = "Security group for frontend server"
+
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
   }
 }
 
-output "deployment_invoke_url" {
-  description = "Deployment invoke url"
-  value       = "${aws_api_gateway_deployment.deployment.invoke_url}/${aws_api_gateway_resource.url_resource.path_part}"
+resource "aws_instance" "react_ec2" {
+  depends_on = [ aws_api_gateway_deployment.deployment ]
+  ami = data.aws_ami.amazonlinux.id
+  instance_type = "t2.micro"
+  key_name = "${var.aws_key}"
+
+  iam_instance_profile = aws_iam_instance_profile.react_ec2_profile.name
+  security_groups = [aws_security_group.react_sg.name ]
+
+  user_data = <<-EOF
+    #!/bin/bash -x
+    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+
+    export NVM_DIR="$HOME/.nvm"
+    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+    [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
+
+    nvm install node
+
+    aws s3 cp s3://vidinsight-frontend-s3/frontend/ /home/ec2-user/frontend/ --recursive --no-sign-request
+    cd /home/ec2-user/frontend/
+
+    npm install
+
+    echo VITE_API_GATEWAY_URL=${aws_api_gateway_deployment.deployment.invoke_url}/${aws_api_gateway_resource.url_resource.path_part} >> ./.env
+
+    npm run build
+
+    sudo yum install nginx -y
+
+    sudo tee /etc/nginx/conf.d/default.conf << EOL
+    server {
+        listen 80;
+        server_name _;  # Accepts any domain name
+
+        root /home/ec2-user/frontend/dist;  # Path to your built files
+        index index.html;
+
+        # Handle React Router
+        location / {
+            try_files \$uri \$uri/ /index.html =404;
+        }
+    }
+    EOL
+
+    sudo chmod 755 /home/ec2-user/
+
+    echo 'Start the server'
+    sudo systemctl start nginx
+    sudo systemctl enable nginx
+    sudo systemctl reload nginx
+  EOF
+
+  tags = {
+    Name = "vidinsight-react-ec2"
+  }
 }
+#endregion
