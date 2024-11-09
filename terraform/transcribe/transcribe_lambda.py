@@ -20,7 +20,7 @@ def lambda_handler(event, context):
             TranscriptionJobName = job_name,
             Media = {'MediaFileUri': job_uri},
             MediaFormat = 'mp4',
-            LanguageCode = 'en-US'
+            LanguageCode = 'en-US',
             OutputBucketName = output_bucket
         )
         return {
