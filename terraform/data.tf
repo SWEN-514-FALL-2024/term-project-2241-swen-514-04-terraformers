@@ -19,3 +19,21 @@ data "aws_ami" "amazonlinux" {
         values = ["x86_64"]
     }
 }
+
+data "archive_file" "get_presigned_url_file" {
+  type        = "zip"
+  source_file = "./handlers/get_presigned_url.py"
+  output_path = "./handlers/get_presigned_url.zip"
+}
+
+data "archive_file" "transcribe_lambda_file" {
+  type        = "zip"
+  source_file = "./handlers/transcribe_lambda.py"
+  output_path = "./handlers/transcribe_lambda.zip"
+}
+
+data "archive_file" "comprehend_lambda_file" {
+  type        = "zip"
+  source_file = "./handlers/comprehend_lambda.py"
+  output_path = "./handlers/comprehend_lambda.zip"
+}

@@ -1,9 +1,9 @@
 output "deployment_invoke_url" {
   description = "Deployment invoke url"
-  value       = "${aws_api_gateway_deployment.deployment.invoke_url}/${aws_api_gateway_resource.url_resource.path_part}"
+  value       = "${aws_api_gateway_deployment.deployment.invoke_url}"
 }
 
 output "react_site_url" {
   description = "React Site URL"
-  value       = "${aws_instance.react_ec2.public_ip}"
+  value       = aws_instance.react_ec2.public_ip
 }

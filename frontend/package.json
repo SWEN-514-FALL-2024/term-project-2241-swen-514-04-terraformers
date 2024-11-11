@@ -12,6 +12,7 @@
   "dependencies": {
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-router-dom": "^6.28.0",
     "term-project-2241-swen-514-04-terraformers": "file:"
   },
   "devDependencies": {
