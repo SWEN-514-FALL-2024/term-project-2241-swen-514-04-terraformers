@@ -2,10 +2,16 @@ provider "aws" {
   region = "us-east-1" 
 }
 
-# Create S3 Bucket
+# Create S3 Source Bucket
 resource "aws_s3_bucket" "my_bucket" {
   bucket = "my-recognition-bucket"  
   force_destroy = true               
+}
+
+#Target bucket for results
+resource "aws_s3_bucket" "target_bucket" {
+  bucket = "my-bucket-analysis-kmm"
+  force_destroy = true
 }
 
 # Create IAM Role for Lambda with Rekognition and S3 permissions
@@ -40,11 +46,18 @@ resource "aws_iam_policy" "rekognition_policy" {
       },
       {
         Action = [
-          "s3:GetObject",
-          "s3:PutObject"
+          "s3:GetObject"
         ],
         Effect = "Allow",
         Resource = "${aws_s3_bucket.my_bucket.arn}/*"
+
+      },
+      {
+        Action = [
+          "s3:PutObject"
+        ],
+        Effect = "Allow",
+        Resource = "${aws_s3_bucket.target_bucket.arn}/*"
       }
     ]
   })
@@ -67,6 +80,7 @@ resource "aws_lambda_function" "rekognition_lambda" {
   environment {
     variables = {
       BUCKET_NAME = aws_s3_bucket.my_bucket.bucket
+      TARGET_BUCKET_NAME = aws_s3_bucket.target_bucket.bucket
     }
   }
 }
