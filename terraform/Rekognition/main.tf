@@ -3,9 +3,14 @@ provider "aws" {
 }
 
 # Create S3 Bucket
-resource "aws_s3_bucket" "my_bucket" {
-  bucket = "my-recognition-bucket"  
+resource "aws_s3_bucket" "input_bucket" {
+  bucket = "rekognition-input-bucket"  
   force_destroy = true               
+}
+
+resource "aws_s3_bucket" "output_bucket" {
+  bucket = "rekognition-output-bucket"  
+  force_destroy = true     
 }
 
 # Create IAM Role for Lambda with Rekognition and S3 permissions
@@ -44,7 +49,15 @@ resource "aws_iam_policy" "rekognition_policy" {
           "s3:PutObject"
         ],
         Effect = "Allow",
-        Resource = "${aws_s3_bucket.my_bucket.arn}/*"
+        Resource = "${aws_s3_bucket.input_bucket.arn}/*"
+      },
+      {
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject"
+        ],
+        Effect = "Allow",
+        Resource = "${aws_s3_bucket.output_bucket.arn}/*"
       }
     ]
   })
@@ -66,14 +79,15 @@ resource "aws_lambda_function" "rekognition_lambda" {
 
   environment {
     variables = {
-      BUCKET_NAME = aws_s3_bucket.my_bucket.bucket
+      INPUT_BUCKET  = aws_s3_bucket.input_bucket.bucket
+      OUTPUT_BUCKET = aws_s3_bucket.output_bucket.bucket
     }
   }
 }
 
 # Step 4: S3 Bucket Notification to Trigger Lambda
 resource "aws_s3_bucket_notification" "s3_notification" {
-  bucket = aws_s3_bucket.my_bucket.id
+  bucket = aws_s3_bucket.input_bucket.id
 
   lambda_function {
     lambda_function_arn = aws_lambda_function.rekognition_lambda.arn
