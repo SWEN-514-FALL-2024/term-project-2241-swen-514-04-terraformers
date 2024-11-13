@@ -1,32 +1,45 @@
-// VideoUpload.jsx
 import React, { useState } from 'react';
-import './UploadPage.css'; // Import the CSS file
+import { useNavigate } from 'react-router-dom';
+import './UploadPage.css';
 
 const UploadPage = () => {
+  const navigate = useNavigate();
   const [selectedFile, setSelectedFile] = useState(null);
+  const [selectedFilename, setSelectedFilename] = useState("");
   const [isFileUploaded, setIsFileUploaded] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-  // Handle file drop or file selection
+  const generateUniqueFilename = (originalFilename) => {
+    const extension = originalFilename.split('.').pop();
+    const timestamp = Date.now();
+    const randomStr = Math.random().toString(36).substring(2, 8);
+    return `${timestamp}_${randomStr}.${extension}`;
+  };
+
   const handleFileChange = (event) => {
     const file = event.target.files[0];
     if (file && file.type === 'video/mp4') {
-      setSelectedFile(file);
+      const uniqueFilename = generateUniqueFilename(file.name);
+      const uniqueFile = new File([file], uniqueFilename, {
+        type: file.type,
+        lastModified: file.lastModified,
+      });
+      
+      setSelectedFile(uniqueFile);
+      setSelectedFilename(file.name)
       setIsFileUploaded(true);
     } else {
       alert('Please upload an MP4 file.');
     }
   };
 
-  // Handle the "Analyze" button click
   const handleAnalyzeClick = async () => {
     if (!selectedFile) return;
 
     setIsAnalyzing(true);
 
     try {
-      
-      const postResponse = await fetch(import.meta.env.VITE_API_GATEWAY_URL, {
+      const postResponse = await fetch(`${import.meta.env.VITE_API_GATEWAY_URL}/url`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -35,25 +48,27 @@ const UploadPage = () => {
       });
 
       const postResult = await postResponse.json();
-
+      console.log(postResult)
       const uploadUrl = postResult.body.url;
 
-      // 2. Make PUT request to upload the file to the obtained URL
       const putResponse = await fetch(uploadUrl, {
         method: 'PUT',
         headers: {
           'Content-Type': 'video/mp4',
         },
-        body: selectedFile, // The video file itself
+        body: selectedFile,
       });
 
       if (putResponse.ok) {
-        alert('File uploaded successfully!');
+        // Get the filename without extension for the route
+        const routeId = selectedFile.name.split('.')[0];
+        navigate(`/${routeId}`);
       } else {
         alert('File upload failed.');
       }
     } catch (error) {
       console.error('Error uploading file:', error);
+      alert('An error occurred during upload.');
     } finally {
       setIsAnalyzing(false);
     }
@@ -63,7 +78,6 @@ const UploadPage = () => {
     <div className="video-upload-container">
       <h1>Vidinsight</h1>
       <h2>Transcribe. Analyze. Synthesize.</h2>
-      {/* Square drop box */}
       <div className="dropbox">
         <input
           type="file"
@@ -72,17 +86,16 @@ const UploadPage = () => {
           onChange={handleFileChange}
         />
         <span className={"dropbox-text" + (isFileUploaded ? " uploaded" : "")}>
-          {isFileUploaded ? selectedFile.name : 'Drop MP4 file here or click to upload'}
+          {isFileUploaded ? selectedFilename : 'Drop MP4 file here or click to upload'}
         </span>
       </div>
 
-      {/* Analyze button */}
       <button
         onClick={handleAnalyzeClick}
         disabled={!isFileUploaded || isAnalyzing}
         className={`analyze-button ${!isFileUploaded || isAnalyzing ? 'disabled' : ''}`}
       >
-        {isAnalyzing ? 'Analyzing...' : 'Analyze'}
+        {isAnalyzing ? 'Uploading...' : 'Analyze'}
       </button>
     </div>
   );
