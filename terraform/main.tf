@@ -2,6 +2,12 @@ provider "aws" {
   region = "us-east-1"
 }
 
+resource "random_string" "bucket_suffix" {
+  length  = 8
+  special = false
+  upper   = false
+}
+
 #region React EC2 Site
 resource "aws_iam_role" "react_ec2_role" {
   name = "vidinsight-react-ec2-role"
@@ -422,7 +428,7 @@ resource "aws_lambda_function" "get_presigned_url" {
   role          = aws_iam_role.input_bucket_role.arn
   handler       = "get_presigned_url.lambda_handler"
 
-  source_code_hash = data.archive_file.get_presigned_url_file.output_base64sha256
+  source_code_hash = filebase64sha256("./handlers/get_presigned_url.zip")
   timeout          = 30
   runtime = "python3.12"
 
@@ -503,7 +509,7 @@ resource "aws_iam_role_policy_attachment" "input_s3_role_policy_attachment" {
 
 #region Input S3
 resource "aws_s3_bucket" "input_bucket" {
-  bucket        = "terraformers-vidinsight-s3-input"
+  bucket        = "terraformers-vidinsight-s3-input-${random_string.bucket_suffix.result}"
   force_destroy = true
 }
 
@@ -597,7 +603,7 @@ resource "aws_iam_role_policy_attachment" "output_s3_role_policy_attachment" {
 
 #region Output S3
 resource "aws_s3_bucket" "output_bucket" {
-  bucket        = "terraformers-vidinsight-s3-output"
+  bucket        = "terraformers-vidinsight-s3-output-${random_string.bucket_suffix.result}"
   force_destroy = true
 }
 

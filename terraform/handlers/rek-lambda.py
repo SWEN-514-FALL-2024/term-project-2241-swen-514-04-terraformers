@@ -11,7 +11,7 @@ target_bucket_name = os.getenv("TARGET_BUCKET_NAME")
 def handler(event, context):
     # Retrieve the S3 bucket name and object key from the event
     bucket_name = event['Records'][0]['s3']['bucket']['name']
-    object_key = event['Records'][0]['s3']['object']['key']
+    object_key:str = event['Records'][0]['s3']['object']['key']
     
     print(f"New file uploaded: {object_key} in bucket {bucket_name}")
     
@@ -43,8 +43,10 @@ def handler(event, context):
             ]
         }
         
+        filename = object_key.split(".")[0]
+
         # Save the result into target S3
-        result_key = f"analysis_results/{object_key}.json"
+        result_key = f"{filename}/rekognition.json"
         s3_client.put_object(
             Bucket=target_bucket_name,
             Key=result_key,

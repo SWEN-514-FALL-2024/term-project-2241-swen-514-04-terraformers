@@ -7,6 +7,7 @@ for file in *.py; do
         # Get filename without extension
         filename="${file%.py}"
         # Create a zip file containing just this Python file
+        rm "${filename}.zip"
         zip "${filename}.zip" "$file"
         echo -e "\033[0mCreated ${filename}.zip containing $file\033[0m"
     fi

@@ -1,6 +1,7 @@
 import json
 import boto3
 import os
+import uuid
 
 def lambda_handler(event, context):
     s3 = boto3.client('s3')
@@ -9,18 +10,29 @@ def lambda_handler(event, context):
     input_bucket = os.environ['INPUT_BUCKET']
     output_bucket = os.environ['OUTPUT_BUCKET']
 
-    file_name = event['Records'][0]['s3']['object']['key']
-    job_name = file_name.split('.')[0]
-    job_uri = f"s3://{input_bucket}/{file_name}"
+    file = event['Records'][0]['s3']['object']['key']
+    filename = file.split('.')[0]
+
+    # job_name = f"{filename}_{str(uuid.uuid4())}"
+    # job_uri = f"s3://{input_bucket}/{file}"
 
     # Take in transcribe output json data
     try:
         print("STARTING TO TAKE TRANSCRIBE JSON")
-        transcribe_output_bucket = s3.get_object(Bucket=input_bucket, Key=file_name)
+        transcribe_output_bucket = s3.get_object(Bucket=input_bucket, Key=file)
         transcribe_data = json.loads(transcribe_output_bucket['Body'].read().decode('utf-8'))
+
         print("TOOK TRANSCRIBE JSON, NOW TAKING THE TEXT")
         # Extract the transcribed text for analysis
         transcribed_text = transcribe_data.get('results', {}).get('transcripts', [{}])[0].get('transcript', "")
+
+        transcribe_output_key = f"{filename}/transcribe.json"
+        s3.put_object(
+            Bucket=output_bucket,
+            Key=transcribe_output_key,
+            Body=json.dumps(transcribed_text)
+        )
+
         print("Extracted transcribed text for Comprehend analysis.")
         
     except Exception as e:
@@ -43,7 +55,7 @@ def lambda_handler(event, context):
         print("Comprehend analysis complete.")
         
         # Send result to S3
-        analysis_output_key = f"{job_name}/comprehend.json"
+        analysis_output_key = f"{filename}/comprehend.json"
         s3.put_object(
             Bucket=output_bucket,
             Key=analysis_output_key,
