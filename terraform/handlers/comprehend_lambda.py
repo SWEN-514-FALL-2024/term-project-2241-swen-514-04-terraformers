@@ -24,16 +24,38 @@ def lambda_handler(event, context):
 
         print("TOOK TRANSCRIBE JSON, NOW TAKING THE TEXT")
         # Extract the transcribed text for analysis
-        transcribed_text = transcribe_data.get('results', {}).get('transcripts', [{}])[0].get('transcript', "")
-
+        transcribed_text:str = transcribe_data.get('results', {}).get('transcripts', [{}])[0].get('transcript', "")
         transcribe_output_key = f"{filename}/transcribe.json"
-        s3.put_object(
-            Bucket=output_bucket,
-            Key=transcribe_output_key,
-            Body=json.dumps(transcribed_text)
-        )
+        if transcribed_text is None or transcribed_text.strip() == '':
+            # set transcribe and comprehend to false
+            s3.put_object(
+                Bucket=output_bucket,
+                Key=transcribe_output_key,
+                Body=json.dumps({"exists": False})
+            )
 
-        print("Extracted transcribed text for Comprehend analysis.")
+            analysis_output_key = f"{filename}/comprehend.json"
+            s3.put_object(
+                Bucket=output_bucket,
+                Key=analysis_output_key,
+                Body=json.dumps({"exists": False})
+            )
+
+            return {
+            'statusCode': 200,
+            'body': json.dumps({
+                'message': 'Comprehend analysis success: No transcription, so no analysis was conducted.',
+                'analysis_file': analysis_output_key
+            })
+        }
+        else:
+            s3.put_object(
+                Bucket=output_bucket,
+                Key=transcribe_output_key,
+                Body=json.dumps({"exists": True, "data": transcribed_text})
+            )
+
+            print("Extracted transcribed text for Comprehend analysis.")
         
     except Exception as e:
         error = str(e)
@@ -59,7 +81,7 @@ def lambda_handler(event, context):
         s3.put_object(
             Bucket=output_bucket,
             Key=analysis_output_key,
-            Body=json.dumps(comprehend_response)
+            Body=json.dumps({"exists": True, "data": comprehend_response})
         )
         print(f"Analysis saved to {analysis_output_key} in Comprehend output bucket.")
         
