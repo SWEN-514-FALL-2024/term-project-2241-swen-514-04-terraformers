@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import './ResultPage.css';
 
@@ -22,6 +22,7 @@ const ResultPage = () => {
             setError(false);
         } catch (err) {
             setError(true);
+            console.error('Error fetching data:', err);
         } finally {
             setLoading(false);
         }
@@ -69,7 +70,6 @@ const ResultPage = () => {
                 <h3>Detected Labels</h3>
                 <div className="labels-timeline">
                     {data.labels.map((frame, index) => {
-                        // Sort labels by confidence in descending order
                         const sortedLabels = [...frame.detectedLabels].sort((a, b) => b.confidence - a.confidence);
                         
                         return (
@@ -128,7 +128,7 @@ const ResultPage = () => {
             <div className="result-page">
                 <div className="error-container">
                     <h2>Error</h2>
-                    <p>Sorry, we couldn't process your video. Please try again.</p>
+                    <p>Sorry, we couldn&apos;t process your video. Please try again.</p>
                     <button onClick={fetchData}>Retry</button>
                 </div>
             </div>
@@ -138,7 +138,14 @@ const ResultPage = () => {
     return (
         <div className="result-page">
             <div className="header">
-                <h1>Analysis Results</h1>
+                <div className="title-section">
+                    <h1>Analysis Results</h1>
+                    {data.name && (
+                        <div className="filename">
+                            {data.name}
+                        </div>
+                    )}
+                </div>
                 <div className="controls">
                     <button onClick={fetchData}>Refresh</button>
                     <label className="auto-refresh">

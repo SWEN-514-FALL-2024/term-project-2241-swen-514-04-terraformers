@@ -1,18 +1,19 @@
 
 #region Lambda (Input S3 => Transcribe)
-resource "aws_lambda_function" "transcribe_lambda" {
-  filename      = "./handlers/transcribe_lambda.zip"
-  function_name = "transcribe_lambda_function"
+resource "aws_lambda_function" "start_jobs" {
+  filename      = "./handlers/start_jobs.zip"
+  function_name = "start_jobs_function"
   role          = aws_iam_role.transcribe_role.arn
-  handler       = "transcribe_lambda.lambda_handler"
+  handler       = "start_jobs.lambda_handler"
 
   runtime          = "python3.12"
-  source_code_hash = filebase64sha256("./handlers/transcribe_lambda.zip")
+  source_code_hash = filebase64sha256("./handlers/start_jobs.zip")
+  timeout = 30
 
   environment {
     variables = {
       INPUT_BUCKET  = aws_s3_bucket.input_bucket.bucket
-      OUTPUT_BUCKET = aws_s3_bucket.transcribe_output_bucket.bucket
+      TRANSCRIBE_OUTPUT_BUCKET = aws_s3_bucket.transcribe_output_bucket.bucket
       SNS_TOPIC_ARN = aws_sns_topic.rekognition_updates.arn
       REKOGNITION_ROLE_ARN = aws_iam_role.rekognition_sns_role.arn
     }
@@ -23,7 +24,7 @@ resource "aws_s3_bucket_notification" "input_bucket_notification" {
   bucket = aws_s3_bucket.input_bucket.id
 
   lambda_function {
-    lambda_function_arn = aws_lambda_function.transcribe_lambda.arn
+    lambda_function_arn = aws_lambda_function.start_jobs.arn
     events              = ["s3:ObjectCreated:*"]
     filter_suffix       = ".mp4" #trigger for .mp4 files
   }
@@ -33,7 +34,7 @@ resource "aws_s3_bucket_notification" "input_bucket_notification" {
 
 resource "aws_lambda_permission" "transcribe_permission" {
   action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.transcribe_lambda.function_name
+  function_name = aws_lambda_function.start_jobs.function_name
   principal     = "s3.amazonaws.com"
   source_arn    = aws_s3_bucket.input_bucket.arn
 }
@@ -243,6 +244,110 @@ resource "aws_iam_role_policy_attachment" "rekognition_processor_policy_attachme
 }
 #endregion
 
+#region EventBridge for Transcribe
+resource "aws_cloudwatch_event_rule" "transcribe_event_rule" {
+  name        = "capture-transcribe-status"
+  description = "Capture all Transcribe job status changes"
+
+  event_pattern = jsonencode({
+    source      = ["aws.transcribe"]
+    detail-type = ["Transcribe Job State Change"]
+    detail = {
+      TranscriptionJobStatus = ["COMPLETED", "FAILED"]
+    }
+  })
+}
+
+resource "aws_cloudwatch_event_target" "transcribe_event_target" {
+  rule      = aws_cloudwatch_event_rule.transcribe_event_rule.name
+  target_id = "ProcessTranscribeResult"
+  arn       = aws_lambda_function.process_transcribe.arn
+}
+
+# Lambda to process Transcribe results
+resource "aws_lambda_function" "process_transcribe" {
+  filename         = "./handlers/process_transcribe.zip"
+  function_name    = "process_transcribe_results"
+  role             = aws_iam_role.transcribe_processor_role.arn
+  handler          = "process_transcribe.lambda_handler"
+  runtime          = "python3.12"
+  timeout          = 30
+
+  environment {
+    variables = {
+      INPUT_BUCKET = aws_s3_bucket.transcribe_output_bucket.bucket
+      OUTPUT_BUCKET = aws_s3_bucket.output_bucket.bucket
+    }
+  }
+}
+
+resource "aws_lambda_permission" "transcribe_eventbridge" {
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.process_transcribe.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.transcribe_event_rule.arn
+}
+
+resource "aws_iam_role" "transcribe_processor_role" {
+  name = "transcribe-processor-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_policy" "transcribe_processor_policy" {
+  name        = "transcribe-processor-policy"
+  description = "Policy for Lambda processing Transcribe results"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "transcribe:GetTranscriptionJob"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject"
+        ]
+        Resource = [
+          "${aws_s3_bucket.transcribe_output_bucket.arn}/*",
+          "${aws_s3_bucket.output_bucket.arn}/*"
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Resource = "arn:aws:logs:*:*:*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "transcribe_processor_policy_attachment" {
+  role       = aws_iam_role.transcribe_processor_role.name
+  policy_arn = aws_iam_policy.transcribe_processor_policy.arn
+}
+#endregion
 
 #region Transcribe Output S3
 resource "aws_s3_bucket" "transcribe_output_bucket" {

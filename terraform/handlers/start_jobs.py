@@ -4,11 +4,12 @@ import os
 import uuid
 
 def lambda_handler(event, context):
+    s3 = boto3.client('s3')
     transcribe = boto3.client('transcribe')
     rekognition_client = boto3.client("rekognition")
     
     input_bucket = os.environ['INPUT_BUCKET']
-    output_bucket = os.environ['OUTPUT_BUCKET']
+    transcribe_output_bucket = os.environ['TRANSCRIBE_OUTPUT_BUCKET']
 
     file = event['Records'][0]['s3']['object']['key']
     filename = file.split('.')[0]
@@ -16,19 +17,10 @@ def lambda_handler(event, context):
     job_name = f"{filename}_{str(uuid.uuid4())}"
     job_uri = f"s3://{input_bucket}/{file}"
 
-    # Start transcription job
     try:
-        transcribe_response = transcribe.start_transcription_job(
-            TranscriptionJobName = job_name,
-            Media = {'MediaFileUri': job_uri},
-            MediaFormat = 'mp4',
-            LanguageCode = 'en-US',
-            OutputBucketName = output_bucket,
-            OutputKey = f"{filename}.json"
-        )
 
         # Start Rekognition Video Analysis
-        rekognition_response = rekognition_client.start_label_detection(
+        rekognition_client.start_label_detection(
             Video={
                 'S3Object': {
                     'Bucket': input_bucket,
@@ -40,6 +32,16 @@ def lambda_handler(event, context):
                 'RoleArn': os.environ['REKOGNITION_ROLE_ARN']
             },
             JobTag=job_name
+        )
+
+        # Start Transcription Job
+        transcribe.start_transcription_job(
+            TranscriptionJobName = job_name,
+            Media = {'MediaFileUri': job_uri},
+            MediaFormat = 'mp4',
+            LanguageCode = 'en-US',
+            OutputBucketName = transcribe_output_bucket,
+            OutputKey = f"{filename}.json"
         )
 
         return {

@@ -33,6 +33,13 @@ def lambda_handler(event, context):
             Bucket=output_bucket,
             Key=f"{filename}/"
         )
+
+        # Create name.json file in output bucket
+        s3.put_object(
+            Bucket=output_bucket,
+            Key=f"{filename}/name.json",
+            Body=json.dumps(event.get('name'))
+        )
         
         return {
             "statusCode": "200",

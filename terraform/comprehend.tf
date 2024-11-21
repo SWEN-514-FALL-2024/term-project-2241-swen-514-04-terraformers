@@ -1,13 +1,13 @@
 #region Lambda (Input S3 => Comprehend)
-resource "aws_lambda_function" "comprehend_lambda" {
-  filename         = "./handlers/comprehend_lambda.zip"
-  function_name    = "comprehend_lambda_function"
+resource "aws_lambda_function" "process_comprehend" {
+  filename         = "./handlers/process_comprehend.zip"
+  function_name    = "process_comprehend_function"
   role             = aws_iam_role.comprehend_role.arn
-  handler          = "comprehend_lambda.lambda_handler"
+  handler          = "process_comprehend.lambda_handler"
 
   runtime          = "python3.12"
   timeout = 30
-  source_code_hash = filebase64sha256("./handlers/comprehend_lambda.zip")
+  source_code_hash = filebase64sha256("./handlers/process_comprehend.zip")
 
   environment {
     variables = {
@@ -21,7 +21,7 @@ resource "aws_s3_bucket_notification" "transcribe_output_bucket_notification" {
   bucket = aws_s3_bucket.transcribe_output_bucket.id
 
   lambda_function {
-    lambda_function_arn = aws_lambda_function.comprehend_lambda.arn
+    lambda_function_arn = aws_lambda_function.process_comprehend.arn
     events              = ["s3:ObjectCreated:*"]
     filter_suffix       = ".json" #trigger for .mp4 files
   }
@@ -31,7 +31,7 @@ resource "aws_s3_bucket_notification" "transcribe_output_bucket_notification" {
 
 resource "aws_lambda_permission" "comprehend_permission" {
   action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.comprehend_lambda.function_name
+  function_name = aws_lambda_function.process_comprehend.function_name
   principal     = "s3.amazonaws.com"
   source_arn    = aws_s3_bucket.transcribe_output_bucket.arn
 }

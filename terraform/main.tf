@@ -110,7 +110,7 @@ resource "aws_instance" "react_ec2" {
 
     npm install
 
-    echo VITE_API_GATEWAY_URL=${aws_api_gateway_deployment.deployment.invoke_url} >> ./.env
+    echo VITE_API_GATEWAY_URL=${aws_api_gateway_deployment.deployment.invoke_url}${aws_api_gateway_stage.prod.stage_name} >> ./.env
 
     npm run build
 
@@ -417,7 +417,12 @@ resource "aws_api_gateway_deployment" "deployment" {
     aws_api_gateway_integration_response.name_options_integration_response
   ]
   rest_api_id = aws_api_gateway_rest_api.rest_api.id
-  stage_name  = "prod"
+}
+
+resource "aws_api_gateway_stage" "prod" {
+  deployment_id = aws_api_gateway_deployment.deployment.id
+  rest_api_id = aws_api_gateway_rest_api.rest_api.id
+  stage_name   = "prod"
 }
 #endregion
 

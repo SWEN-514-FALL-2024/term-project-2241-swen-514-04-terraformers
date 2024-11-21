@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Upload, FileVideo } from 'lucide-react';
 import './UploadPage.css';
@@ -70,7 +70,7 @@ const UploadPage = () => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ key: selectedFile.name }),
+        body: JSON.stringify({ key: selectedFile.name, name: selectedFilename }),
       });
 
       const postResult = await postResponse.json();
